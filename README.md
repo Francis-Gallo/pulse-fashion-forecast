@@ -1,111 +1,99 @@
-# Pulse — Predictive Fashion Intelligence
+# Pulse: LLM-assisted fashion trend scouting
 
-Pulse is a GenAI-powered fashion trend forecasting tool that detects what will go mainstream **3–6 months before it does** — by scanning Reddit communities, fashion RSS feeds, and Google Trends in real time.
+Pulse collects **weak signals** from fashion communities and press: Reddit hot posts, fashion RSS headlines,
+Google Trends interest and your own notes. It sends them to an LLM, which returns **5 structured trend
+hypotheses**. Each one has a confidence score, a momentum label, an estimated time to mainstream, a "why now" and a
+suggested action. It is built for fashion buyers, stylists and trend researchers who otherwise scroll for hours.
 
----
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React%2019%20%2B%20Vite%20%2B%20Tailwind-20232A?logo=react&logoColor=61DAFB)
+![Groq](https://img.shields.io/badge/Groq-llama--3.1--8b--instant-F55036)
+![LM Studio](https://img.shields.io/badge/fallback-LM%20Studio%20(local)-6D28D9)
 
-## Problem
+**Demo video (5 min):** [Google Drive](https://drive.google.com/file/d/1xiQwLtt9Qdaj-13jFjtNtqp0PCRHgN9t/view?usp=sharing)
 
-Fashion buyers, brand managers, and stylists spend **hours manually browsing** Reddit, Instagram, and trade publications to spot emerging trends. By the time a trend appears in mainstream media, it is already peaking.
+> The forecasts are **LLM-generated hypotheses**, not validated predictions. The confidence numbers and timelines
+> come from the model, not from a backtest. A human should review them before acting (see [RAI.md](RAI.md)).
 
-## Solution
-
-Pulse automates weak-signal detection: it aggregates hundreds of posts from fashion communities, feeds them to a large language model, and returns 5 ranked trend predictions with confidence scores, momentum labels, and estimated mainstream timelines.
-
-## Target Users
-
-- Independent fashion buyers and stylists
-- Emerging brand managers
-- Fashion students and trend researchers
-
----
-
-## Quick Start
-
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Groq API key (free at [console.groq.com](https://console.groq.com)) **or** LM Studio running locally
-
-### 1 — Backend
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
-```
-Backend runs at `http://localhost:8000`
-
-### 2 — Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Frontend runs at `http://localhost:5173`
-
-### 3 — Run a forecast
-1. Open `http://localhost:5173`
-2. Click **Sources** (top right)
-3. Select **Groq Cloud**, paste your API key
-4. Pick Reddit presets (e.g. Streetwear + Luxury)
-5. Click **run forecast**
-
----
-
-## Demo
-
-**Video demo (5 min):** [Watch on Google Drive](https://drive.google.com/file/d/1xiQwLtt9Qdaj-13jFjtNtqp0PCRHgN9t/view?usp=sharing)
-
-## Architecture
+## How it works
 
 ```mermaid
-flowchart TD
-    A[👤 User\nFashion Buyer / Brand Manager] --> B
-
-    B[🖥️ Pulse — React App\nlocalhost:5173]
-
-    B -->|POST /api/fetch| C[⚡ FastAPI Backend\nlocalhost:8000]
-    B -->|POST /api/analyze| C
-
-    C --> D[Reddit Public API\nr/streetwear · r/fashion\nr/femalefashionadvice]
-    C --> E[RSS Feeds\nHypebeast · Vogue\nThe Cut · WWD]
-    C --> F[Google Trends\npytrends · fashion keywords]
-
-    D -->|50-120 signals| G
-    E -->|50-120 signals| G
-    F -->|50-120 signals| G
-
-    G[🔄 Signal Aggregator\nFilter · Rank · Format] -->|top 50 signals as text| H
-
-    H[🤖 Llama 3.1 8B Instant\nGroq Cloud API\nfree · ~3s · cloud inference]
-
-    H -->|5 trend predictions JSON| C
-    C -->|trends + confidence scores| B
-
-    B --> I[📊 Trend Cards\nName · Confidence % · Momentum\nTimeline · Why Now · Action]
-
-    style A fill:#fdf2f8,stroke:#ec4899
-    style B fill:#fdf2f8,stroke:#ec4899
-    style H fill:#ede9fe,stroke:#8b5cf6
-    style I fill:#fdf2f8,stroke:#ec4899
+flowchart LR
+    U[React UI<br/>localhost:5173] -->|POST /api/fetch| B[FastAPI<br/>localhost:8000]
+    B --> R[Reddit hot.json<br/>up to 20 posts / subreddit]
+    B --> S[RSS: Hypebeast, The Cut, BoF,<br/>Vogue, WWD, Refinery29]
+    B --> G[Google Trends via pytrends<br/>5 fashion keywords, last 7 days]
+    B --> M[Manual notes, one per line]
+    U -->|POST /api/analyze| B
+    B -->|first 50 signals as text| L[Groq llama-3.1-8b-instant<br/>or any LM Studio model]
+    L -->|JSON: theme, summary, 5 trends| U
 ```
 
-> See `ARCHITECTURE.md` for full details.
+- **Signals:** subreddit presets (Streetwear, Luxury, Vintage, Lifestyle) or custom subreddits, six RSS feeds,
+  optional Google Trends scores, and free-text notes.
+- **Analysis:** a zero-shot prompt with a fixed JSON template (temperature 0.1, max 2500 tokens). A tolerant
+  parser removes markdown fences and extracts the outermost JSON object.
+- **UI:** trend cards with confidence bars and momentum badges, a raw signal feed with source filters, a
+  history of the runs in the current session, and export to `.txt`.
 
----
+## Quick start
 
-## AI Components Disclosure
+Requirements: Python 3.11+ and Node.js 20.19+ or 22.12+ (Vite 7). You also need **either** a free [Groq API key](https://console.groq.com) **or** LM Studio running locally.
 
-| Component | Details |
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload          # http://localhost:8000
+
+# Frontend (new terminal)
+cd frontend
+npm install
+npm run dev                        # http://localhost:5173
+```
+
+On Windows, `start.bat` starts both.
+
+Then:
+1. Open `http://localhost:5173` and click **Sources**.
+2. Choose **Groq Cloud** and paste your key, or choose LM Studio and pick a loaded model.
+3. Select subreddit presets or RSS feeds (optionally Google Trends), then click **run forecast**.
+
+The Groq key is typed in the browser and sent to the backend with each request. It is not written to disk.
+`.env.example` lists `GROQ_API_KEY` and `LM_STUDIO_URL`, but the current backend does not read a `.env` file.
+
+## API
+
+| Endpoint | Purpose |
 |---|---|
-| Foundation Model | Llama 3.1 8B Instant via Groq Cloud API |
-| Fallback Model | Phi-3.1-Mini-4K-Instruct via LM Studio (local) |
-| Prompt type | Zero-shot structured JSON extraction |
-| Data sources | Reddit public JSON API, RSS feeds (Hypebeast, Vogue, The Cut, WWD, Business of Fashion, Refinery29), Google Trends via pytrends |
-| AI media tools used | None |
+| `GET /api/health` | Health check |
+| `GET /api/sources` | Available RSS feeds |
+| `GET /api/models?lm_url=` | Models loaded in LM Studio |
+| `POST /api/fetch` | Collects signals: `reddit_subs`, `reddit_limit`, `rss_feeds`, `manual_text`, `use_gtrends` |
+| `POST /api/analyze` | Sends the signals to the LLM: `signals`, `groq_api_key` **or** `lm_url` + `model` |
 
----
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): layers, data flow, business process
+- [RAI.md](RAI.md): model choice, guardrails, risks, cost
+- [SECURITY.md](SECURITY.md): how secrets are handled
+- [CHANGELOG.md](CHANGELOG.md)
+- `Pulse-AI-Powered-Fashion-Trend-Forecasting.pptx`: project presentation (28 MB)
+
+## Limitations
+
+- **No evaluation yet.** Nothing has been backtested to check whether predicted trends went mainstream.
+- **Reddit and RSS headlines skew young, English-speaking and Western.**
+- **Only the first 50 signals are sent**, in the order they were collected. They are not ranked by relevance.
+- **Local tool.** CORS is open (`*`) and the backend calls whichever LM Studio URL it is given. Do not expose it publicly as is.
+- Reddit's unauthenticated JSON endpoint and pytrends can rate-limit or change without notice. Failures are skipped silently.
+
+## Roadmap
+
+- Rank and deduplicate signals before the 50-signal cap
+- Save each run, then score past predictions against later Google Trends data
+- Read `GROQ_API_KEY` from the environment as an alternative to the UI field
 
 ## Team
 
-- Francis Gallo — M2 AI, ECE Paris
+Francis Gallo Sahayaraj (M2 AI, ECE Paris)
